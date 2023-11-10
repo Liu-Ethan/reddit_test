@@ -61,9 +61,7 @@ class ConfigValue(object):
 
     @staticmethod
     def choice(**choices):
-        print("sss", choices)
         def parse_choice(v, key=None):
-            print(v, key)
             try:
                 return choices[v]
             except KeyError:
@@ -105,7 +103,6 @@ class ConfigValueParser(dict):
         new_keys = []
         for parser, keys in spec.items():
             # keys can be either a list or a dict
-            print(parser, keys)
             for key in keys:
                 assert key not in self.config_keys
                 self.config_keys[key] = parser
@@ -125,49 +122,48 @@ class ConfigValueParser(dict):
 
 
 
-config_data = {
-    'name': 'John',
-    'age': '30',
-    'height': '175.5',
-    'is_enabled': 'true',
-    'fruits': 'apple,banana,orange',
-    'numbers': '1,2,3,4,5',
-    'address': """{
-        "street": "123 Main St",
-        "city": "New York",
-        "zip_code": "10001"
-    }""",
-    'favorite_color': 'blue',
-}
+# config_data = {
+#     'name': 'John',
+#     'age': '30',
+#     'height': '175.5',
+#     'is_enabled': 'true',
+#     'fruits': 'apple,banana,orange',
+#     'numbers': '1,2,3,4,5',
+#     'address': """{
+#         "street": "123 Main St",
+#         "city": "New York",
+#         "zip_code": "10001"
+#     }""",
+#     'favorite_color': 'blue',
+# }
 
 # 创建 ConfigValueParser 对象
-config_parser = ConfigValueParser(config_data)
+# config_parser = ConfigValueParser(config_data)
 
 # 添加配置规范
-config_parser.add_spec({
-    ConfigValue.str: ['name'],
-    ConfigValue.int: ['age'],
-    ConfigValue.float: ['height'],
-    ConfigValue.bool: ['is_enabled'],
-    ConfigValue.set: ['fruits'],
-    ConfigValue.tuple: ['numbers'],
-    ConfigValue.dict: ['address'],
-    ConfigValue.choice(red='red', blue='blue', green='green'): ['favorite_color'],
-})
+# config_parser.add_spec({
+#     ConfigValue.str: ['name'],
+#     ConfigValue.int: ['age'],
+#     ConfigValue.float: ['height'],
+#     ConfigValue.bool: ['is_enabled'],
+#     ConfigValue.set: ['fruits'],
+#     ConfigValue.tuple: ['numbers'],
+#     ConfigValue.dict: ['address'],
+#     ConfigValue.choice(red='red', blue='blue', green='green'): ['favorite_color'],
+# })
 
-# 访问解析后的配置值
-name = config_parser['name']
-age = config_parser['age']
-height = config_parser['height']
-is_enabled = config_parser['is_enabled']
-fruits = config_parser['fruits']
-numbers = config_parser['numbers']
-address = config_parser['address']
-favorite_color = config_parser['favorite_color']
+# # 访问解析后的配置值
+# name = config_parser['name']
+# age = config_parser['age']
+# height = config_parser['height']
+# is_enabled = config_parser['is_enabled']
+# fruits = config_parser['fruits']
+# numbers = config_parser['numbers']
+# address = config_parser['address']
+# favorite_color = config_parser['favorite_color']
 
-# 输出解析后的配置值
-print(f"Name: {name}, Age: {age}, Height: {height}, Is Enabled: {is_enabled}")
-print(f"Fruits: {fruits}, Numbers: {numbers}, Address: {address}")
-print(f"Favorite Color: {favorite_color}")
-
+# # 输出解析后的配置值
+# print(f"Name: {name}, Age: {age}, Height: {height}, Is Enabled: {is_enabled}")
+# print(f"Fruits: {fruits}, Numbers: {numbers}, Address: {address}")
+# print(f"Favorite Color: {favorite_color}")
 
