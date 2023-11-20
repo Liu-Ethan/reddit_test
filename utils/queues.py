@@ -48,6 +48,7 @@ class MessageQueue(object):
         self.bind_to_self = bind_to_self  # 绑定到自身
 
     def _bind(self, routing_key):
+        # print(f"ssss, {self},{self.name}", self.bindings)
         self.bindings.add((self.name, routing_key))
 
     def __lshift__(self, routing_keys):
@@ -59,20 +60,24 @@ class MessageQueue(object):
             self._bind(routing_key)
 
 
-def declare_queues(g):
+def declare_queues():
     queues = Queues({
         "vote_comment_q": MessageQueue(bind_to_self=True),
         "newcomments_q": MessageQueue()
     })
 
-    if g.shard_commentstree_queues:
-        sharded_commentstree_queues = {"commentstree_%d_q" % i:
-                                           MessageQueue(bind_to_self=True)
-                                       for i in range(10)}
-        queues.declare(sharded_commentstree_queues)
+    # if g.shard_commentstree_queues:
+    #     sharded_commentstree_queues = {"commentstree_%d_q" % i:
+    #                                        MessageQueue(bind_to_self=True)
+    #                                    for i in range(10)}
+    #     queues.declare(sharded_commentstree_queues)
 
     # 然后通过 << 过载操作符将路由键注册到队列的绑定中
-    queues.vote_comment_q << ("vote_comment_q", )
+    queues.vote_comment_q << ("vote_comment_q_test",)
     queues.newcomments_q << ("new_link", "link_text_edited")
 
     return queues
+
+# queues = declare_queues()
+# for i in queues:
+#     print(i)

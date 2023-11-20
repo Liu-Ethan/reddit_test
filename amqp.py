@@ -6,30 +6,22 @@ from queue import Queue
 from threading import local, Thread
 
 import pika
+import pika.exceptions
 
-from app_globals import Globals
-
-
-def initialize(app_globals):
-    global cfg
-    cfg = Config(app_globals)
-    global worker
-    worker = Worker()
-    global connection_manager
-    connection_manager = ConnectionManager()
+from utils.queues import declare_queues
 
 
 class Config(object):
     def __init__(self, g):
-        self.amqp_host = g.amqp_host
-        self.amqp_user = g.amqp_user
-        self.amqp_pass = g.amqp_pass
+        self.amqp_host = g['amqp_host']
+        self.amqp_user = g['amqp_user']
+        self.amqp_pass = g['amqp_pass']
         self.amqp_exchange = 'reddit_exchange'
         # self.log = g.log
-        self.amqp_virtual_host = g.amqp_virtual_host
-        self.amqp_logging = g.amqp_logging
+        self.amqp_virtual_host = g['amqp_virtual_host']
+        self.amqp_logging = g['amqp_logging']
         # self.stats = g.stats
-        self.queues = g.queues
+        self.queues = g["queues"]
 
 
 class Worker:
@@ -65,11 +57,13 @@ class ConnectionManager(local):
         self.connection = None
         self.channel = None
         self.have_init = False
+        # self.queues = queues
 
     def get_connection(self):
         while not self.connection:
             try:
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+                # self.connection.channel().basic_publish()
             except (socket.error, IOError) as e:
                 print('error connecting to amqp %s @ %s (%r)' %
                       (cfg.amqp_user, cfg.amqp_host, e))
@@ -85,9 +79,9 @@ class ConnectionManager(local):
         # Periodic (and increasing with uptime) errors appearing when
         # connection object is still present, but appears to have been
         # closed.  This checks that the the connection is still open.
-        if self.connection and self.connection.channels is None:
-            print("Error: amqp.py, connection object with no available channels.")
-            self.connection = None
+        # if self.connection and self.connection.channels is None:
+        #     print("Error: amqp.py, connection object with no available channels.")
+        #     self.connection = None
 
         if not self.connection or reconnect:
             self.connection = None
@@ -102,7 +96,7 @@ class ConnectionManager(local):
     def init_queue(self):
         chan = self.get_channel()
         # 声明交换机
-        chan.exchange_declare(exchange=cfg.amqp_exchange,
+        chan.exchange_declare(exchange="reddit_exchange",
                               exchange_type="direct",
                               durable=True,
                               auto_delete=False)
@@ -117,7 +111,7 @@ class ConnectionManager(local):
         for queue, key in cfg.queues.bindings:
             chan.queue_bind(routing_key=key,
                             queue=queue,
-                            exchange=cfg.amqp_exchange)
+                            exchange="reddit_exchange")
 
 
 DELIVERY_TRANSIENT = 1
@@ -135,17 +129,25 @@ def _add_item(routing_key, body, message_id=None,
     properties = pika.BasicProperties(  # 设置消息的基本属性, 。这些属性包括消息的持久性、消息的优先级、消息的时间戳、消息的类型和其他元数据。
         message_id=message_id,
         # 设置消息的有效期为 10 秒
-        expiration='10000'
+        # expiration='10000'
     )
 
-    # event_name = 'amqp.%s' % routing_key
+    def on_return(*args, **kwargs):
+        print("Message1111 returned!", args, kwargs)
+
+    # 设置回调函数
+    chan.add_on_return_callback(on_return)
+    # 启用生产者确认模式
+    chan.confirm_delivery()
     try:
         chan.basic_publish(exchange=exchange,
                            routing_key=routing_key,
-                           body=body, properties=properties)
-    except Exception as e:
-
-        raise e
+                           body=body, properties=properties, mandatory=True)
+    except pika.exceptions.UnroutableError:
+        # 开启用生产者确认模式：chan.confirm_delivery()
+        # 设置：mandatory=True ，设置为 True，
+        # 当无法将消息路由到队列时，会触发pika.exceptions.UnroutableError异常
+        print('Message was returned')
 
 
 def add_item(routing_key, body, message_id=None,
@@ -172,7 +174,7 @@ def handle_items(queue, callback, ack=True, limit=1, min_size=0,
 
     while True:
 
-        msg = chan.basic_get(queue)
+        msg = chan.basic_get(queue)  # 允许消费者主动从队列中获取一条消息
         if not msg and drain:
             return
         elif not msg:
@@ -216,6 +218,11 @@ def handle_items(queue, callback, ack=True, limit=1, min_size=0,
 
 
 def consume_items(queue, callback, verbose=True):
+    """
+    消费者函数，用于消费队列中的消息
+    :param queue: 要消费的队列的名称
+    :param callback: 处理每条消息的回调函数
+    """
     chan = connection_manager.get_channel()
 
     # configure the amount of data rabbit will send down to our buffer before
@@ -225,19 +232,30 @@ def consume_items(queue, callback, verbose=True):
         # 预取窗口的大小，通常设置为0表示不限制消息的大小
         prefetch_size=0,
         # 最大预取消息数量，表示一次从队列中获取的消息数量。
-        prefetch_count=10,
+        prefetch_count=1000,
         # 一个布尔值，表示是否将配置应用于所有通道，通常为 False，只应用于当前通道。
         global_qos=False
     )
 
     def _callback(ch, method, properties, body):
-        print('_callback:', method, properties.__dict__, body)
+        print('_callback:', body, method, properties.__dict__, )
 
         ret = callback(body)
+        if body.decode('utf-8') == 'message_0005':
+            # 手动拒绝消息
+            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=True)
+            """
+            delivery_tag: 表示要拒绝的消息的唯一标识符
+            requeue=True: 表示是否将拒绝的消息重新放回队列, 如果设置为 False，消息将被丢弃, 如果设置为 True，拒绝的消息将重新进入队列，可以被其他消费者重新处理；
+            """
+        else:
+            # 手动确认消息
+            ch.basic_ack(delivery_tag=method.delivery_tag)
         return ret
 
     # 轮询队列以获取新消息
-    chan.basic_consume(queue=queue, on_message_callback=_callback, auto_ack=True)
+    chan.basic_consume(queue=queue, on_message_callback=_callback, auto_ack=False)
+    # 是一个阻塞调用，它会持续从队列中接收消息并调用指定的回调函数进行处理，直到程序手动停止或出现错误
     chan.start_consuming()
 
 
@@ -304,18 +322,17 @@ config_data = {
     'amqp_pass': 'reddit',
     'amqp_virtual_host': ' /',
     'amqp_logging': 'false',
-    'shard_commentstree_queues': 'false'
-    # 'address': """{
-    #     "street": "123 Main St",
-    #     "city": "New York",
-    #     "zip_code": "10001"
-    # }""",
-    # 'favorite_color': 'blue',
+    'shard_commentstree_queues': 'false',
+    'queues': declare_queues()
 }
-gc = Globals(config_data=config_data)
 
-initialize(gc)
-worker.join()  # 阻塞当前线程
+worker = Worker()
+cfg = Config(config_data)
+connection_manager = ConnectionManager()
+
+# connection_manager.get_connection()
+
+# worker.join()  # 阻塞当前线程
 
 for i in range(10):
     add_item('vote_comment_q', f"message_000{i}", message_id=str(uuid.uuid4()))
@@ -327,18 +344,19 @@ for i in range(10):
 
 
 def _run_changed(*args, **kwargs):
-    # print("_run_changed:", args, kwargs)
+    print("_run_changed:", args, kwargs)
     pass
 
 
+#
+#
 queue = 'vote_comment_q'
-# 单个消费
+# # # 单个消费
 consume_items(queue, _run_changed)
 
 # 批量消费
 # handle_items(queue, _run_changed, min_size=2,
-#              limit=10, drain=False, sleep_time=2,
-#              verbose=True)
+#              limit=10, drain=False, sleep_time=2)
 
 # empty_queue(queue)
 
