@@ -1,13 +1,6 @@
-def tup(item, ret_is_single=False):
-    """将item强制转换为元组（用于列表）或生成单元素元组（用于其他类型）"""
-    # 返回可迭代对象，但排除字符串（字符串是我们想要的）
-    if hasattr(item, '__iter__'):
-        return (item, False) if ret_is_single else item
-    else:
-        return ((item,), True) if ret_is_single else (item,)
-
-
 __all__ = ["MessageQueue", "declare_queues"]
+
+from utils import tup
 
 
 class Queues(dict):
@@ -56,6 +49,7 @@ class MessageQueue(object):
         << 运算符实际上调用了__lshift__,方法，这个方法接受一个或多个路由键，并将它们添加到队列的绑定中，以便队列可以接收来自这些路由键的消息。
         """
         routing_keys = tup(routing_keys)
+        print(routing_keys)
         for routing_key in routing_keys:
             self._bind(routing_key)
 
@@ -73,11 +67,12 @@ def declare_queues():
     #     queues.declare(sharded_commentstree_queues)
 
     # 然后通过 << 过载操作符将路由键注册到队列的绑定中
-    queues.vote_comment_q << ("vote_comment_q_test",)
+    # queues.vote_comment_q << ("vote_comment_q_test",)
+    queues.vote_comment_q << "vote_comment_q_test"
     queues.newcomments_q << ("new_link", "link_text_edited")
 
     return queues
 
-# queues = declare_queues()
-# for i in queues:
-#     print(i)
+
+queues = declare_queues()
+print(queues.bindings)

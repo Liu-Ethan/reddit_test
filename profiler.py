@@ -36,7 +36,18 @@ def profile(fn):
         currently_profiling.disable()
         stats = pstats.Stats(currently_profiling)
         stats.sort_stats('cumtime')
-        stats.print_stats(.1)
+        stats.print_stats()
 
         return ret
     return _fn
+
+
+# 使用装饰器
+@profile
+def my_function():
+    # 在这里编写需要性能分析的代码
+    for i in range(10000):
+        _ = [j for j in range(i)]
+
+# 调用函数，触发性能分析
+my_function()
